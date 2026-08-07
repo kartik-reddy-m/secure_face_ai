@@ -82,3 +82,20 @@ The main objectives of this project are:
           If spoof detected:
                     ↓
              ❌ SPOOF DETECTED
+
+---
+
+## Development setup
+
+The backend scaffold is ready. From the project root, create and activate a
+virtual environment, install dependencies, and start the API:
+
+```powershell
+py -m venv backend/.venv
+backend/.venv/Scripts/Activate.ps1
+py -m pip install -r backend/requirements.txt
+py -m uvicorn main:app --app-dir backend --reload
+```
+
+Then open `http://127.0.0.1:8000/docs` to view the interactive API docs, or
+visit `http://127.0.0.1:8000/health` to confirm the service is running.
