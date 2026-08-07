@@ -99,3 +99,10 @@ py -m uvicorn main:app --app-dir backend --reload
 
 Then open `http://127.0.0.1:8000/docs` to view the interactive API docs, or
 visit `http://127.0.0.1:8000/health` to confirm the service is running.
+
+## Face detection API
+
+`POST /detect-face` accepts one multipart form field named `image`. It returns
+whether a face was detected, the number of faces, and a bounding box for each
+detected face. Use the interactive docs at `http://127.0.0.1:8000/docs` to
+upload a clear, front-facing photo and test the endpoint.
