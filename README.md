@@ -90,11 +90,14 @@ The main objectives of this project are:
 The backend scaffold is ready. From the project root, create and activate a
 virtual environment, install dependencies, and start the API:
 
+Create and use the project virtual environment:
+
 ```powershell
-py -m venv backend/.venv
-backend/.venv/Scripts/Activate.ps1
-py -m pip install -r backend/requirements.txt
-py -m uvicorn main:app --app-dir backend --reload
+python -m venv backend/.venv
+.\backend\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r backend/requirements.txt
+python -m uvicorn main:app --app-dir backend --reload
 ```
 
 Then open `http://127.0.0.1:8000/docs` to view the interactive API docs, or
@@ -106,3 +109,12 @@ visit `http://127.0.0.1:8000/health` to confirm the service is running.
 whether a face was detected, the number of faces, and a bounding box for each
 detected face. Use the interactive docs at `http://127.0.0.1:8000/docs` to
 upload a clear, front-facing photo and test the endpoint.
+
+## Registration API
+
+`POST /register` accepts `name`, `consent`, and `image` form fields. It accepts
+only one detectable face, creates a 512-value face descriptor, and
+stores it locally in SQLite. The current descriptor is a learning-prototype
+baseline, not a production biometric model; replace it with a validated model
+before any real-world security use. Register only people who have explicitly
+consented to biometric processing.
