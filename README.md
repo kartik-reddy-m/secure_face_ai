@@ -118,3 +118,11 @@ stores it locally in SQLite. The current descriptor is a learning-prototype
 baseline, not a production biometric model; replace it with a validated model
 before any real-world security use. Register only people who have explicitly
 consented to biometric processing.
+
+## Verification API
+
+`POST /verify` accepts one `image` field, requires exactly one detected face,
+and compares its descriptor with locally registered users. The endpoint returns
+a match only when its cosine-similarity score is at least `0.80`. This threshold
+is a prototype setting and must be measured and tuned with appropriate data
+before any real-world use.

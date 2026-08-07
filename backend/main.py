@@ -2,9 +2,10 @@
 
 import sqlite3
 
+import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
-from database.repository import initialize_database, save_registration
+from database.repository import get_registrations, initialize_database, save_registration
 from face_detection.detector import FaceDetector
 from face_verification.embedder import FaceEmbedder
 
@@ -16,6 +17,7 @@ app = FastAPI(
 face_detector = FaceDetector()
 face_embedder = FaceEmbedder()
 initialize_database()
+MATCH_THRESHOLD = 0.80
 
 
 @app.get("/health", tags=["system"])
@@ -80,3 +82,51 @@ async def register_user(
         raise HTTPException(status_code=400, detail="Unable to create a face embedding.") from error
 
     return {"id": registration_id, "name": name.strip(), "registered": True}
+
+
+@app.post("/verify", tags=["verification"])
+async def verify_user(image: UploadFile = File(...)) -> dict[str, object]:
+    """Compare a single face image against locally registered descriptors."""
+    if not image.content_type or not image.content_type.startswith("image/"):
+        raise HTTPException(status_code=415, detail="Upload an image file.")
+
+    image_bytes = await image.read()
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="The uploaded image is empty.")
+
+    try:
+        faces = face_detector.detect(image_bytes)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    if len(faces) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Verification requires an image with exactly one detectable face.",
+        )
+
+    registrations = get_registrations()
+    if not registrations:
+        raise HTTPException(status_code=404, detail="No users have been registered yet.")
+
+    try:
+        probe = face_embedder.create_embedding(image_bytes, faces[0])
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    best_id: int | None = None
+    best_name: str | None = None
+    best_score = -1.0
+    for registration_id, name, embedding in registrations:
+        if embedding.shape != probe.shape:
+            continue
+        score = float(np.dot(probe, embedding))
+        if score > best_score:
+            best_id, best_name, best_score = registration_id, name, score
+
+    verified = best_score >= MATCH_THRESHOLD
+    return {
+        "verified": verified,
+        "match": {"id": best_id, "name": best_name} if verified else None,
+        "similarity": round(best_score, 4),
+        "threshold": MATCH_THRESHOLD,
+    }

@@ -33,3 +33,15 @@ def save_registration(name: str, embedding: np.ndarray) -> int:
             (name, embedding.astype(np.float32).tobytes()),
         )
         return int(cursor.lastrowid)
+
+
+def get_registrations() -> list[tuple[int, str, np.ndarray]]:
+    """Return all stored registrations and their face descriptors."""
+    with sqlite3.connect(DATABASE_PATH) as connection:
+        rows = connection.execute(
+            "SELECT id, name, embedding FROM registrations"
+        ).fetchall()
+    return [
+        (int(registration_id), name, np.frombuffer(embedding, dtype=np.float32))
+        for registration_id, name, embedding in rows
+    ]
