@@ -45,3 +45,25 @@ def get_registrations() -> list[tuple[int, str, np.ndarray]]:
         (int(registration_id), name, np.frombuffer(embedding, dtype=np.float32))
         for registration_id, name, embedding in rows
     ]
+
+
+def get_all_users() -> list[dict[str, object]]:
+    """Return summary metadata for all registered users."""
+    with sqlite3.connect(DATABASE_PATH) as connection:
+        rows = connection.execute(
+            "SELECT id, name, created_at FROM registrations ORDER BY id DESC"
+        ).fetchall()
+    return [
+        {"id": int(registration_id), "name": name, "created_at": created_at}
+        for registration_id, name, created_at in rows
+    ]
+
+
+def delete_registration(registration_id: int) -> bool:
+    """Delete a registered user by ID and return True if deleted."""
+    with sqlite3.connect(DATABASE_PATH) as connection:
+        cursor = connection.execute(
+            "DELETE FROM registrations WHERE id = ?", (registration_id,)
+        )
+        return cursor.rowcount > 0
+

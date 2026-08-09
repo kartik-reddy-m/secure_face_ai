@@ -103,6 +103,20 @@ python -m uvicorn main:app --app-dir backend --reload
 Then open `http://127.0.0.1:8000/docs` to view the interactive API docs, or
 visit `http://127.0.0.1:8000/health` to confirm the service is running.
 
+## User Management API
+
+`GET /users` returns all registered user profiles with summary metadata (`id`, `name`, `created_at`).
+`DELETE /users/{user_id}` deletes a registered user profile and its biometric descriptor from the database.
+
+## Automated Testing
+
+Run the backend Pytest suite to verify system endpoints, input validation, and liveness token security:
+
+```powershell
+.\backend\.venv\Scripts\Activate.ps1
+pytest backend/tests
+```
+
 ## Face detection API
 
 `POST /detect-face` accepts one multipart form field named `image`. It returns
@@ -126,3 +140,15 @@ and compares its descriptor with locally registered users. The endpoint returns
 a match only when its cosine-similarity score is at least `0.80`. This threshold
 is a prototype setting and must be measured and tuned with appropriate data
 before any real-world use.
+
+## Liveness API
+
+`POST /liveness/check` accepts three image fields: `open_eyes_before`,
+`closed_eyes`, and `open_eyes_after`. A successful blink check returns a
+single-use token valid for two minutes. Supply this token as `liveness_token`
+when calling `POST /verify`; verification is otherwise rejected.
+
+This blink challenge is a learning prototype, not robust anti-spoofing. It can
+be bypassed by replayed video and must be replaced by a validated presentation-
+attack-detection model before deployment.
+

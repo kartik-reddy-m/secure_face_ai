@@ -4,8 +4,16 @@ import sqlite3
 
 import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 
-from database.repository import get_registrations, initialize_database, save_registration
+from anti_spoof.liveness import LivenessTokenStore
+from database.repository import (
+    delete_registration,
+    get_all_users,
+    get_registrations,
+    initialize_database,
+    save_registration,
+)
 from face_detection.detector import FaceDetector
 from face_verification.embedder import FaceEmbedder
 
@@ -14,10 +22,17 @@ app = FastAPI(
     version="0.1.0",
     description="Face verification with liveness detection.",
 )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 face_detector = FaceDetector()
 face_embedder = FaceEmbedder()
 initialize_database()
 MATCH_THRESHOLD = 0.80
+liveness_tokens = LivenessTokenStore()
 
 
 @app.get("/health", tags=["system"])
@@ -85,7 +100,10 @@ async def register_user(
 
 
 @app.post("/verify", tags=["verification"])
-async def verify_user(image: UploadFile = File(...)) -> dict[str, object]:
+async def verify_user(
+    liveness_token: str = Form(..., min_length=1),
+    image: UploadFile = File(...),
+) -> dict[str, object]:
     """Compare a single face image against locally registered descriptors."""
     if not image.content_type or not image.content_type.startswith("image/"):
         raise HTTPException(status_code=415, detail="Upload an image file.")
@@ -124,9 +142,73 @@ async def verify_user(image: UploadFile = File(...)) -> dict[str, object]:
             best_id, best_name, best_score = registration_id, name, score
 
     verified = best_score >= MATCH_THRESHOLD
+    if not liveness_tokens.consume(liveness_token):
+        raise HTTPException(
+            status_code=403,
+            detail="A valid, unused liveness token is required before verification.",
+        )
+
     return {
         "verified": verified,
         "match": {"id": best_id, "name": best_name} if verified else None,
         "similarity": round(best_score, 4),
         "threshold": MATCH_THRESHOLD,
     }
+
+
+@app.post("/liveness/check", tags=["liveness"])
+async def check_liveness(
+    open_eyes_before: UploadFile = File(...),
+    closed_eyes: UploadFile = File(...),
+    open_eyes_after: UploadFile = File(...),
+) -> dict[str, object]:
+    """Validate an open-eyes, closed-eyes, open-eyes blink sequence."""
+    eye_states: list[bool] = []
+    for frame in (open_eyes_before, closed_eyes, open_eyes_after):
+        if not frame.content_type or not frame.content_type.startswith("image/"):
+            raise HTTPException(status_code=415, detail="All frames must be image files.")
+        frame_bytes = await frame.read()
+        try:
+            faces = face_detector.detect(frame_bytes)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        if len(faces) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Each liveness frame must contain exactly one detectable face.",
+            )
+        eye_states.append(face_detector.eyes_are_visible(frame_bytes, faces[0]))
+
+    live = eye_states == [True, False, True]
+    if not live:
+        return {
+            "live": False,
+            "challenge": "blink once",
+            "eye_states": eye_states,
+            "liveness_token": None,
+        }
+
+    return {
+        "live": True,
+        "challenge": "blink once",
+        "eye_states": eye_states,
+        "liveness_token": liveness_tokens.issue(),
+        "expires_in_seconds": 120,
+    }
+
+
+@app.get("/users", tags=["registration"])
+def list_users() -> dict[str, object]:
+    """Retrieve all registered users and metadata."""
+    users = get_all_users()
+    return {"count": len(users), "users": users}
+
+
+@app.delete("/users/{user_id}", tags=["registration"])
+def remove_user(user_id: int) -> dict[str, object]:
+    """Delete a registered user by ID."""
+    success = delete_registration(user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return {"id": user_id, "deleted": True}
+
